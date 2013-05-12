@@ -1,0 +1,9 @@
+Version 1.1 (Bugfixes, writed MySQLi database driver)
++ Added DbMySQLi class (like a driver)
+* Changed App::__get
+* Changed config.php
+* Renamed class Db to DbPDO
+* Refactoring: AddressController
+
+Version 1 (Initial version)
++ File structire, classes

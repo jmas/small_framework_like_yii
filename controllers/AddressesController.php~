@@ -1,0 +1,145 @@
+<?php
+
+/**
+ * @class AddressesController Address controller class contain CRUD operations for Address model
+ * @author Maslakov Alexander <jmas.ukraine@gmail.com>
+ */
+class AddressesController
+{
+	/**
+	 * @var $_result array Result data for render
+	 */
+	protected $_result = array(
+		'error'=>false,
+		'errorMessage'=>null,
+		'validationErrors'=>array(),
+		'data'=>array(),
+	);
+
+	/**
+	 * Controller contructor.
+	 */
+	public function __construct()
+	{
+		// Set cotent-type
+		header('Content-type: application/json');
+	}
+
+	/**
+	 * Method used for control get (read) operation.
+	 * @param $id integer|null PK of Address model
+	 * @return null
+	 */
+	public function get($id=null)
+	{
+		$model = new Address;
+
+		if ($id !== null) {
+			$model = $this->loadModel($id);
+
+			$this->_result['data'] = $model;
+		} else {
+			$models = $model->findAll();
+
+			$this->_result['data'] = array_map(array($this, 'getModelAttributes'), $models);
+		}
+
+		$this->renderResult();
+	}
+
+	/**
+	 * Method used for control put (insert) operation.
+	 * @return null
+	 */
+	public function put()
+	{
+		$model = new Address;
+
+		$this->saveModel($model);
+
+		$this->renderResult();
+	}
+
+	/**
+	 * Method used for control delete operation.
+	 * @param $id integer PK of Address model
+	 * @return null
+	 */
+	public function delete($id)
+	{
+		$model = $this->loadModel($id);
+
+		if ($model->delete($id) === false) {
+			$this->_result['error'] = true;
+			$this->_result['errorMessage'] = 'Record not deleted.';
+		} else {
+			$this->_result['data'] = $model;
+		}
+
+		$this->renderResult();
+	}
+
+	/**
+	 * Method used for control post (update) operation.
+	 * @param $id integer PK of Address model
+	 * @return null
+	 */
+	public function post($id)
+	{
+		$model = $this->loadModel($id);
+
+		$this->saveModel($model);
+
+		$this->renderResult();
+	}
+
+	protected function saveModel(Address $model)
+	{
+		$model->setAttributes(App::getInstance()->request->getData());
+
+		if ($model->save() === false) {
+			$this->_result['error'] = true;
+			$this->_result['errorMessage'] = 'Record not updated.';
+			$this->_result['validationErrors'] = $model->getErrors();
+		} else {
+			$this->_result['data'] = $model;
+		}
+	}
+
+	/**
+	 * Special protected function used in array_map function for
+	 * convert array of Address models to array with models attributes.
+	 * @param $model Address Model
+	 * @return array Model attributes
+	 */
+	protected function getModelAttributes(Address $model)
+	{
+		return $model->getAttributes();
+	}
+
+	/**
+	 * Render result in JSON format.
+	 * @return null
+	 */
+	protected function renderResult()
+	{
+		echo json_encode($this->_result);
+	}
+
+	/**
+	 * Special protected function for load Address model.
+	 * If model not found - generate exception with message about this.
+	 * @param $id integer PK of record in DB
+	 * @throw Exception
+	 * @return Address Model
+	 */
+	protected function loadModel($id)
+	{
+		$model = new Address;
+		if ($model->findByPk($id) === false) {
+			throw new Exception('Record not found.');
+		}
+
+		return $model;
+	}
+}

@@ -1,0 +1,222 @@
+<?php
+
+/**
+ * MySQLi database decorator, emulate PDO API.
+ * @class Db Component class.
+ * @description Class for working with DB using interface MySQLi. MySQLi API is not very good. It's sad.
+ * @author Maslakov Alexander <jmas.ukraine@gmail.com>
+ */
+class DbMySQLi
+{
+	/**
+	 * @var string The Data Source Name, or DSN, contains the information required to connect to the database.
+	 */
+	public $dsn='mysql:dbname=app;host=127.0.0.1;charset=utf8';
+
+	/**
+	 * @var string Database user
+	 */
+	public $user='root';
+
+	/**
+	 * @var string Database password
+	 */
+	public $password='';
+
+	/**
+	 * @var string Database driver options
+	 */
+	public $driverOptions=array();
+
+	/**
+	 * @var $connection MySQLi connection link
+	 */
+	private $_connection;
+
+	/**
+	 * @var $_errors MySQLi errors from the last command executed
+	 */
+	private $_errors=array();
+
+
+	/**
+	 * Get connection to MySQL database.
+	 * If connection not created - this method create connection.
+	 * @return mysqli MySQLi connection link
+	 */
+	public function getConnection()
+	{
+		if ($this->_connection === null) {
+			$dsn = substr($this->dsn, strpos($this->dsn, ':')+1);
+			$dsn = explode(';', $dsn);
+			$config = array();
+
+			foreach ($dsn as $item) {
+				$a = explode('=', $item);
+				$config[$a[0]] = $a[1];
+			}
+
+			$this->_connection = new mysqli(
+				$config['host'],
+				$this->user,
+				$this->password,
+				$config['dbname']
+			);
+		}
+
+		return $this->_connection;
+	}
+
+	/**
+	 * Prepare an SQL statement for execution.
+	 * @return DbStmt|bool Returns a statement object or FALSE if an error occurred
+	 */
+	public function prepare($sql)
+	{
+		$db = $this->getConnection();
+		
+		if (($stmt = $db->prepare($sql)) === false) {
+			$this->_errors = $db->error_list;
+			return false;
+		}
+
+		return new DbStmt($stmt, $this->getConnection());
+	}
+
+	/**
+	 * Returns the ID of the last inserted row or sequence value.
+	 * @return integer Returns a string representing the row ID of the last row that was inserted into the database
+	 */
+	public function lastInsertId()
+	{
+		return intval($this->getConnection()->insert_id);
+	}
+
+	/**
+	 * Close DB connection when class destruct.
+	 */
+	public function __destruct()
+	{
+		$this->getConnection()->close();
+	}
+}
+
+
+/**
+ * Database request statement class decorator.
+ * Wrapper for MySQLi statement, emulate PDO API.
+ * @class DbStmt
+ */
+class DbStmt
+{
+	/**
+	 * @var MySQLi statement link
+	 */
+	private $_stmt;
+
+	/**
+	 * @var $connection MySQLi connection link
+	 */
+	private $_connection;
+
+	/**
+	 * Construct prepared statement.
+	 * @param $stmt MySQLi statement link
+	 * @param $connection MySQLi connection link
+	 * @return null
+	 */
+	public function __construct($stmt, $connection)
+	{
+		$this->_stmt = $stmt;
+		$this->_connection = $connection;
+	}
+
+	/**
+	 * Execute the prepared statement. You can put params for replacing in SQL.
+	 * @param $params Params for replaceing
+	 * @return Returns TRUE on success or FALSE on failure
+	 */
+	public function execute(array $params=array())
+	{
+		if (count($params) > 0) {
+			$args = array('');
+
+			foreach ($params as $i=>$param) {
+				if (is_numeric($param)) {
+					if (is_float($param)) {
+						$args[0] .= 'd';
+					} else {
+						$args[0] .= 'i';
+					}
+				} else {
+					$args[0] .= 's';
+				}
+				$params[$i] = $this->_connection->real_escape_string($params[$i]);
+				$args[$i+1] = &$params[$i];
+			}
+			
+			call_user_func_array(array($this->_stmt, 'bind_param'), $args);
+		}
+
+		return $this->_stmt->execute();
+	}
+	
+	/**
+	 * Fetches the next row from a result set.
+	 * @return array|bool The return value of this function on success depends on the fetch type. In all cases, FALSE is returned on failure
+	 */
+	public function fetch()
+	{
+		$fieldMeta = mysqli_fetch_fields(mysqli_stmt_result_metadata($this->_stmt)); 
+
+		$result = array();
+		$args = array();
+
+		foreach ($fieldMeta as $i=>$field) {
+			$result[$field->name] = null;
+			$args[$i] = &$result[$field->name];
+		}
+
+		call_user_func_array(array($this->_stmt, 'bind_result'), $args);
+
+		if ($this->_stmt->fetch()) {
+			return $result;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Fetches the next row and returns it as an object.
+	 * @param $className string Name of the created class
+	 * @return object|bool Returns an instance of the required class with property names that correspond to the column names or FALSE on failure
+	 */
+	public function fetchObject($className='stdClass')
+	{
+		$fieldMeta = mysqli_fetch_fields(mysqli_stmt_result_metadata($this->_stmt)); 
+
+		$result = new $className;
+		$args = array();
+
+		foreach ($fieldMeta as $i=>$field) {
+//			$result->{$field->name} = null;
+			$args[$i] = &$result->{$field->name};
+		}
+
+		call_user_func_array(array($this->_stmt, 'bind_result'), $args);
+
+		if ($this->_stmt->fetch()) {
+			return $result;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Delete linked statement.
+	 */
+	public function __destruct()
+	{
+		unset($this->_stmt);
+	}
+}
